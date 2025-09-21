@@ -9,8 +9,15 @@ keywords = ["sway", "swaywm", "vim"]
 readme = "README.md"
 
 [dependencies]
-swayipc = "3.0.3"
+getopts = "0.2.24"
+hyprland = "0.3.13"
+phf = { version = "0.13.1", features = ["macros"] }
 
 [lib]
-name = "swaykbswitch"
+name = "hyprlandkbswitch"
 crate-type = ["cdylib"]
+
+[[bin]]
+name = "switcher"
+path = "./src/lib.rs"
+

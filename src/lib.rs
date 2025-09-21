@@ -1,68 +1,69 @@
-extern crate swayipc;
+extern crate hyprland;
+extern crate phf;
 
 use std::ffi::{CStr, CString};
 
 use std::os::raw::c_char;
 
-use swayipc::{Connection, Input};
+use hyprland::ctl::switch_xkb_layout;
+use hyprland::data::{Devices, Keyboard};
+use hyprland::shared::HyprData;
+use hyprland::Result as HResult;
+use phf::{phf_map};
 
 #[derive(Debug)]
 enum Error {
     InconsistentLayouts,
     NoKeyboards,
+    CannotDetermineLayoutForActiveKeymap
 }
 
 #[no_mangle]
 pub extern "C" fn Xkb_Switch_getXkbLayout() -> *const c_char {
-    let mut conn = Connection::new().unwrap();
-    let layout = get_cur_layout(&mut conn).unwrap();
-    // let _ = UnixStream::from(conn).shutdown(Shutdown::Both);
+    let layout = get_cur_layout().unwrap();
     CString::new(layout).unwrap().into_raw()
 }
 
-fn get_cur_layout(conn: &mut Connection) -> Result<String, Error> {
-    let mut layouts: Vec<String> = get_keyboards(conn)
-        .drain(..)
-        .filter_map(|kb| kb.xkb_active_layout_name)
+// HACK 
+static KEYBOARD_KEYMAP_TO_LAYOUT_MAPPING: phf::Map<&'static str, &'static str> = phf_map! {
+    "Russian" => "ru",
+    "English (US)" => "us",
+};
+
+fn get_cur_layout() -> Result<String, Error> {
+    let mut keymaps: Vec<String> = get_keyboards()
+        .unwrap() //TODO nicer
+        .into_iter()
+        .map(|kb| kb.active_keymap)
         .collect();
-    layouts.dedup();
-    match layouts.leak() {
+    keymaps.dedup();
+    match keymaps.leak() {
         [] => Err(Error::NoKeyboards),
-        [layout] => Ok(layout.to_string()),
+        [keymap] => KEYBOARD_KEYMAP_TO_LAYOUT_MAPPING.get(keymap).ok_or(Error::CannotDetermineLayoutForActiveKeymap).map(|layout| layout.to_string()),
         _ => Err(Error::InconsistentLayouts),
     }
 }
 
-fn get_keyboards(conn: &mut Connection) -> Vec<Input> {
-    let mut all_inputs = conn.get_inputs().unwrap_or_default();
-    all_inputs.retain(|input_device| input_device.input_type == "keyboard");
-    all_inputs
+fn get_keyboards() -> HResult<Vec<Keyboard>>{
+    let devices = Devices::get()?;
+    let all_inputs = devices.keyboards;
+    HResult::Ok(all_inputs)
 }
 
 #[no_mangle]
 pub extern "C" fn Xkb_Switch_setXkbLayout(layout_ptr: *const c_char) {
-    match Connection::new() {
-        Ok(mut conn) => {
             let layout = unsafe { CStr::from_ptr(layout_ptr).to_string_lossy().to_string() };
-            switch_layout(&mut conn, &layout);
-            // let _ = UnixStream::from(conn).shutdown(Shutdown::Both);
-        }
-        Err(_) => (),
-    };
+            switch_layout(&layout);
 }
 
-fn switch_layout(conn: &mut Connection, layout: &String) {
-    get_keyboards(conn).iter().for_each(|kb| {
+fn switch_layout(layout: &String) {
+    get_keyboards().unwrap().iter().for_each(|kb| {
         let layout_index = kb
-            .xkb_layout_names
-            .iter()
+            .layout
+            .split(", ")
             .position(|x| x == layout)
             .unwrap();
 
-        let _ = conn.run_command(format!(
-            "input {} xkb_switch_layout {}",
-            kb.identifier, layout_index
-        ));
-        // .unwrap();
+        switch_xkb_layout::call(kb.name.to_string(), switch_xkb_layout::SwitchXKBLayoutCmdTypes::Id(layout_index as u8)).unwrap();
     });
 }
