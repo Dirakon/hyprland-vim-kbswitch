@@ -1,15 +1,17 @@
 extern crate hyprland;
 extern crate phf;
+extern crate getopts;
 
 use std::ffi::{CStr, CString};
-
 use std::os::raw::c_char;
+use std::process;
 
 use hyprland::ctl::switch_xkb_layout;
 use hyprland::data::{Devices, Keyboard};
 use hyprland::shared::HyprData;
 use hyprland::Result as HResult;
 use phf::{phf_map};
+use getopts::Options;
 
 #[derive(Debug)]
 enum Error {
@@ -66,4 +68,52 @@ fn switch_layout(layout: &String) {
 
         switch_xkb_layout::call(kb.name.to_string(), switch_xkb_layout::SwitchXKBLayoutCmdTypes::Id(layout_index as u8)).unwrap();
     });
+}
+
+// New CLI functionality
+fn print_usage(program: &str, opts: Options) {
+    let brief = format!("Usage: {} [OPTIONS]", program);
+    print!("{}", opts.usage(&brief));
+}
+
+#[allow(dead_code)]
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let program = args[0].clone();
+    
+    let mut opts = Options::new();
+    opts.optflag("g", "get", "Get current XKB layout");
+    opts.optopt("s", "set", "Set XKB layout to LAYOUT", "LAYOUT");
+    opts.optflag("h", "help", "Print this help menu");
+    
+    let matches = match opts.parse(&args[1..]) {
+        Ok(m) => m,
+        Err(f) => {
+            eprintln!("Error: {}", f);
+            process::exit(1);
+        }
+    };
+    
+    if matches.opt_present("h") {
+        print_usage(&program, opts);
+        return;
+    }
+    
+    if matches.opt_present("g") {
+        match get_cur_layout() {
+            Ok(layout) => println!("{}", layout),
+            Err(e) => {
+                eprintln!("Error getting layout: {:?}", e);
+                process::exit(1);
+            }
+        }
+    } else if let Some(layout) = matches.opt_str("s") {
+        let c_layout = CString::new(layout.clone()).unwrap();
+        Xkb_Switch_setXkbLayout(c_layout.as_ptr());
+        println!("Layout set to: {}", layout);
+    } else {
+        eprintln!("Error: Either --get or --set option must be specified");
+        print_usage(&program, opts);
+        process::exit(1);
+    }
 }

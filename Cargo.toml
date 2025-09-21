@@ -1,5 +1,5 @@
 [package]
-name = "libswaykbswitch"
+name = "hyprlandkbswitch"
 authors = ["Andrey Khorokhorin <a-horohorin@mail.ru>"]
 version = "0.2.1"
 description = "A shared library for Vim keyboard layout switching via sway IPC"
@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 getopts = "0.2.24"
-hyprland = "0.3.13"
+hyprland = "0.4.0-beta.1"
 phf = { version = "0.13.1", features = ["macros"] }
 
 [lib]
@@ -18,6 +18,6 @@ name = "hyprlandkbswitch"
 crate-type = ["cdylib"]
 
 [[bin]]
-name = "switcher"
+name = "hyprlandkbswitcher"
 path = "./src/lib.rs"
 
